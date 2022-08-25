@@ -1,0 +1,25 @@
+create or replace view view_location_geo_data as
+WITH RECURSIVE r
+           AS (
+   SELECT id, parent_id, tree_id,geo_tag_id , level,name::text
+   FROM locations_location
+   where parent_id is null
+   UNION ALL
+   SELECT ll.id, ll.parent_id,ll.tree_id ,ll.geo_tag_id , ll.level,(r.name ||'//' || ll.name)::text
+   FROM locations_location ll
+      JOIN r
+          ON ll.parent_id = r.id
+   where ll.parent_id is not null
+)
+SELECT r.parent_id as parent_location,ll2."name" as name, 
+'['||string_agg(('{"id" : '||ee.id||', "name" : "'||r.name||'//'||ee.name||'"}')::text, ','::text)||']'  as attr,
+gtg.longitude, gtg.latitude 
+FROM r 
+join (select tree_id, MAX(level) as maxlevel from r group by tree_id) as maxr
+on r.tree_id = maxr.tree_id and r.level = maxr.maxlevel
+join locations_location ll2 on ll2.id = r.parent_id 
+join geo_tags_geotag gtg on gtg.id = ll2.geo_tag_id 
+join equipment_equipment ee on ee.location_id = r.id and ee.is_deleted = false
+where r.parent_id is not null
+group by r.parent_id,ll2."name",gtg.longitude, gtg.latitude
+order by parent_location ASC;
